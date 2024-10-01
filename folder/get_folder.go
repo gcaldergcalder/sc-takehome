@@ -48,7 +48,6 @@ func (f *driver) GetAllChildFolders(orgID uuid.UUID, name string) ([]Folder, err
 	var childFolders []Folder
 	parentPathWithDot := parentPath + "."
 
-	// Step 2: Find all child folders
 	for _, folder := range f.folders {
 		if folder.OrgId == orgID {
 			if strings.HasPrefix(folder.Paths, parentPathWithDot) {

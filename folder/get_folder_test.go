@@ -14,9 +14,9 @@ func Test_folder_GetFoldersByOrgID(t *testing.T) {
 
 	orgID1 := uuid.Must(uuid.NewV4())
 	orgID2 := uuid.Must(uuid.NewV4())
-	orgID3 := uuid.Must(uuid.NewV4()) // For testing an orgID with no folders
+	orgID3 := uuid.Must(uuid.NewV4())
 
-	// Prepare sample folders
+	// prepare sample folders
 	sampleFolders := []folder.Folder{
 		{Name: "alpha", Paths: "alpha", OrgId: orgID1},
 		{Name: "bravo", Paths: "alpha.bravo", OrgId: orgID1},
@@ -60,7 +60,7 @@ func Test_folder_GetFoldersByOrgID(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // Capture range variable
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			f := folder.NewDriver(tt.folders)
 
@@ -70,7 +70,6 @@ func Test_folder_GetFoldersByOrgID(t *testing.T) {
 				t.Errorf("Expected %d folders, got %d", len(tt.want), len(got))
 			}
 
-			// Optionally, compare the contents of the folders
 			for _, expectedFolder := range tt.want {
 				found := false
 				for _, actualFolder := range got {
