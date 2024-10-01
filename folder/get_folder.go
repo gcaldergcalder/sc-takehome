@@ -29,8 +29,10 @@ func (f *driver) GetAllChildFolders(orgID uuid.UUID, name string) ([]Folder, err
 	var parentPath string
 	found := false
 
-	// Step 1: Find the parent folder
+	//TODO:  bit of a clumsy way of accessing the parent folder, look for more efficient search
+	// iterates over folders attribute in driver struct
 	for _, folder := range f.folders {
+		// breaks loop when finding the folder
 		if folder.OrgId == orgID && folder.Name == name {
 			parentPath = folder.Paths
 			found = true
@@ -39,6 +41,7 @@ func (f *driver) GetAllChildFolders(orgID uuid.UUID, name string) ([]Folder, err
 	}
 
 	if !found {
+		// notifies file not found
 		return nil, fmt.Errorf("Folder '%s' does not exist in the specified organization", name)
 	}
 
