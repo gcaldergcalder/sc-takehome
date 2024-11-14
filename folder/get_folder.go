@@ -2,7 +2,6 @@ package folder
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/gofrs/uuid"
 )
@@ -11,50 +10,65 @@ func GetAllFolders() []Folder {
 	return GetSampleData()
 }
 
-func (f *driver) GetFoldersByOrgID(orgID uuid.UUID) []Folder {
-	folders := f.folders
+func (d *driver) GetFoldersByOrgID(orgID uuid.UUID) []Folder {
+	var res []Folder
 
-	res := []Folder{}
-	for _, f := range folders {
-		if f.OrgId == orgID {
-			res = append(res, f)
+	// makes use of thenew rootNodes to traverse all folders under the given OrgID
+	roots, ok := d.rootNodes[orgID]
+	if !ok {
+		return res
+	}
+
+	var dfs func(*FolderNode)
+	dfs = func(n *FolderNode) {
+		res = append(res, *n.Folder)
+		for _, child := range n.Children {
+			dfs(child)
 		}
 	}
 
-	return res
+	for _, root := range roots {
+		dfs(root)
+	}
 
+	return res
 }
 
-func (f *driver) GetAllChildFolders(orgID uuid.UUID, name string) ([]Folder, error) {
-	var parentPath string
-	found := false
+func (d *driver) GetAllChildFolders(orgID uuid.UUID, name string) ([]Folder, error) {
+	// find the folder with the given name and OrgID
+	foldersWithName, ok := d.nameToFolders[name]
+	if !ok {
+		return nil, fmt.Errorf("folder '%s' does not exist", name)
+	}
 
-	//TODO:  bit of a clumsy way of accessing the parent folder, look for more efficient search
-	// iterates over folders attribute in driver struct
-	for _, folder := range f.folders {
-		// breaks loop when finding the folder
-		if folder.OrgId == orgID && folder.Name == name {
-			parentPath = folder.Paths
-			found = true
+	var folder *Folder
+	for _, f := range foldersWithName {
+		if f.OrgId == orgID {
+			folder = f
 			break
 		}
 	}
 
-	if !found {
-		// notifies file not found
-		return nil, fmt.Errorf("Folder '%s' does not exist in the specified organization", name)
+	if folder == nil {
+		return nil, fmt.Errorf("folder '%s' does not exist in the specified organization", name)
 	}
 
-	var childFolders []Folder
-	parentPathWithDot := parentPath + "."
+	// get the FolderNode
+	node, ok := d.folderNodes[folder.Paths]
+	if !ok {
+		return nil, fmt.Errorf("folder node not found")
+	}
 
-	for _, folder := range f.folders {
-		if folder.OrgId == orgID {
-			if strings.HasPrefix(folder.Paths, parentPathWithDot) {
-				childFolders = append(childFolders, folder)
-			}
+	// collect all child folders using DFS
+	var childFolders []Folder
+	var dfs func(*FolderNode)
+	dfs = func(n *FolderNode) {
+		for _, child := range n.Children {
+			childFolders = append(childFolders, *child.Folder)
+			dfs(child)
 		}
 	}
+	dfs(node)
 
 	return childFolders, nil
 }

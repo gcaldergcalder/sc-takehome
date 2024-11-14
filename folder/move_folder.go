@@ -5,61 +5,78 @@ import (
 	"strings"
 )
 
-func (f *driver) MoveFolder(name string, dst string) ([]Folder, error) {
-	var srcFolder, dstFolder Folder
-	srcFound, dstFound := false, false
-
-	for _, folder := range f.folders {
-		if folder.Name == name {
-			srcFolder = folder
-			srcFound = true
-		}
-		if folder.Name == dst {
-			dstFolder = folder
-			dstFound = true
-		}
-	}
-
-	if !srcFound {
+func (d *driver) MoveFolder(name string, dst string) ([]Folder, error) {
+	// find src
+	srcFolders, ok := d.nameToFolders[name]
+	if !ok || len(srcFolders) == 0 {
 		return nil, fmt.Errorf("source folder '%s' does not exist", name)
 	}
-	if !dstFound {
+	srcFolder := srcFolders[0]
+
+	// find dest
+	dstFolders, ok := d.nameToFolders[dst]
+	if !ok || len(dstFolders) == 0 {
 		return nil, fmt.Errorf("destination folder '%s' does not exist", dst)
 	}
+	dstFolder := dstFolders[0]
 
 	if srcFolder.OrgId != dstFolder.OrgId {
 		return nil, fmt.Errorf("cannot move folder between different organizations")
 	}
 
-	// edge case: moving folder to itself
-	if srcFolder.Name == dstFolder.Name {
+	// edge cases for test criteria
+	if srcFolder.Paths == dstFolder.Paths {
 		return nil, fmt.Errorf("cannot move a folder to itself")
 	}
-
-	// edge case: moving folder into its child
 	if strings.HasPrefix(dstFolder.Paths+".", srcFolder.Paths+".") {
 		return nil, fmt.Errorf("cannot move a folder to its own descendant")
 	}
 
+	srcNode := d.folderNodes[srcFolder.Paths]
+	dstNode := d.folderNodes[dstFolder.Paths]
+
 	oldPathPrefix := srcFolder.Paths
 	newPathPrefix := dstFolder.Paths + "." + srcFolder.Name
 
-	for i, folder := range f.folders {
-		if folder.OrgId == srcFolder.OrgId {
-			if strings.HasPrefix(folder.Paths, oldPathPrefix) {
+	var updatePaths func(*FolderNode)
+	updatePaths = func(n *FolderNode) {
+		oldPath := n.Folder.Paths
+		n.Folder.Paths = strings.Replace(n.Folder.Paths, oldPathPrefix, newPathPrefix, 1)
 
-				relativePath := strings.TrimPrefix(folder.Paths, oldPathPrefix)
-				if len(relativePath) > 0 && relativePath[0] == '.' {
-					relativePath = relativePath[1:]
-				}
-				newPath := newPathPrefix
-				if relativePath != "" {
-					newPath += "." + relativePath
-				}
-				f.folders[i].Paths = newPath
-			}
+		delete(d.folderNodes, oldPath)
+		d.folderNodes[n.Folder.Paths] = n
+
+		for _, child := range n.Children {
+			updatePaths(child)
 		}
 	}
+	updatePaths(srcNode)
 
-	return f.folders, nil
+	// update the tree structure + remove srcNode from old parent's children
+	pathParts := strings.Split(oldPathPrefix, ".")
+	if len(pathParts) > 1 {
+		oldParentPath := strings.Join(pathParts[:len(pathParts)-1], ".")
+		oldParentNode := d.folderNodes[oldParentPath]
+		var newChildren []*FolderNode
+		for _, child := range oldParentNode.Children {
+			if child != srcNode {
+				newChildren = append(newChildren, child)
+			}
+		}
+		oldParentNode.Children = newChildren
+	} else {
+		// root node
+		var newRoots []*FolderNode
+		for _, root := range d.rootNodes[srcFolder.OrgId] {
+			if root != srcNode {
+				newRoots = append(newRoots, root)
+			}
+		}
+		d.rootNodes[srcFolder.OrgId] = newRoots
+	}
+
+	// add srcNode to new parent
+	dstNode.Children = append(dstNode.Children, srcNode)
+
+	return d.folders, nil
 }
